@@ -1,12 +1,3 @@
-"""
-Diffs a section (e.g. Item 1A Risk Factors) across two filing periods at two
-levels:
-  1. Textual diff (paragraph-level added/removed/changed) via difflib.
-  2. Semantic similarity per paragraph via rapidfuzz, to catch paragraphs
-     that were reworded rather than added/deleted outright -- these are the
-     "same risk, different framing" cases that plain diff misses and that
-     matter most to an analyst (e.g. softened vs. hardened litigation language).
-"""
 import difflib
 from dataclasses import dataclass, field
 from rapidfuzz import fuzz
