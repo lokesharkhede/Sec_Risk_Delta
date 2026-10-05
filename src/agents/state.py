@@ -1,4 +1,3 @@
-"""Shared state object passed between every node in the LangGraph pipeline."""
 from typing import TypedDict, Optional
 from src.diffing.diff_engine import SectionDiff
 
