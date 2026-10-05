@@ -1,8 +1,3 @@
-"""
-Each function here is one LangGraph node. Nodes read/write the shared
-RiskDeltaState dict. Keeping them as plain functions (rather than classes)
-keeps the graph definition in graph.py easy to read.
-"""
 from src.agents.state import RiskDeltaState
 from src.data import edgar_client, xbrl_client
 from src.data.ticker_resolver import resolve_ticker as resolve_ticker_lookup
@@ -14,12 +9,7 @@ from src.memory.vector_store import store_risk_paragraphs, find_similar_prior_ri
 
 # ------------------------------------------------------- resolve_ticker ----
 def resolve_ticker(state: RiskDeltaState) -> RiskDeltaState:
-    """
-    First node in the graph. Takes whatever the user typed -- a real ticker,
-    a typo'd company name, or an informal name -- and resolves it to a real
-    SEC ticker before anything else runs. See ticker_resolver.py for the
-    local-fuzzy-match-first, LLM-only-if-needed strategy.
-    """
+
     result = resolve_ticker_lookup(state["company_query"])
     if result["status"] == "ambiguous":
         candidate_list = ", ".join(
@@ -75,12 +65,7 @@ def diff_all_sections(state: RiskDeltaState) -> RiskDeltaState:
 
 # --------------------------------------------------------- orchestrator ----
 def orchestrate(state: RiskDeltaState) -> RiskDeltaState:
-    """
-    Decides which specialist agents are worth invoking, based on where
-    material change was actually detected. This is what makes the graph
-    "agentic" rather than a fixed pipeline: a filing with an untouched
-    litigation section skips the litigation agent entirely.
-    """
+
     route_to = ["financial_agent"]  # financial deltas always checked (cheap, XBRL-based)
 
     if summarize_diff(state["legal_diff"])["material_change_signal"]:
@@ -93,7 +78,6 @@ def orchestrate(state: RiskDeltaState) -> RiskDeltaState:
 
 
 def route_condition(state: RiskDeltaState) -> list[str]:
-    """Used by the graph's conditional edge to fan out to the chosen agents."""
     return state["route_to"]
 
 
@@ -142,11 +126,6 @@ def sentiment_agent(state: RiskDeltaState) -> RiskDeltaState:
     diff = state["risk_factors_diff"]
     ticker = state["ticker"]
 
-    # For each genuinely new risk paragraph, check long-term memory for
-    # semantically similar risks disclosed in earlier filings -- this is
-    # what lets the agent say "this echoes something first seen in Q2 2024"
-    # instead of only ever comparing against the single immediately-prior
-    # filing that diff_sections() looked at.
     historical_context = []
     for paragraph in diff.added:
         hits = find_similar_prior_risks(ticker, paragraph, n_results=2)
@@ -197,10 +176,6 @@ def reconcile(state: RiskDeltaState) -> RiskDeltaState:
         "sentiment_findings": state.get("sentiment_findings")
     }
 
-    # Grow long-term memory: persist this run's full risk-factor paragraph
-    # set (not just the diff) so future runs -- for this ticker, any quarter
-    # from now on -- can semantically search against everything ever seen,
-    # not just the single prior filing that diff_sections() compared against.
     new_risk_text = state["new_sections"].get("item_1a", "")
     store_risk_paragraphs(
         ticker=state["ticker"],
