@@ -1,28 +1,3 @@
-"""
-Splits a raw 10-K/10-Q HTML document into its named Item sections
-(Item 1A Risk Factors, Item 3 Legal Proceedings, Item 7 MD&A, ...).
-
-PRIMARY PARSER: unstructured.io (`unstructured.partition.html.partition_html`)
-  - Classifies each block of the document (NarrativeText, Title, Table,
-    ListItem, ...) instead of returning one flat string. This is what lets
-    us keep tables as distinct, tagged elements rather than having table
-    cells get silently flattened into surrounding paragraph text -- the
-    "handling embedded tables" requirement from the project brief.
-  - Free, pip-installable, no external service/API call, no vision model.
-
-FALLBACK PARSER: BeautifulSoup + regex (`_extract_sections_bs4_fallback`)
-  - Used automatically if `unstructured` isn't installed or throws on a
-    malformed document, so the pipeline never hard-fails on parsing alone.
-  - Cruder: flattens everything to plain text, so a table's cells just run
-    together as text in reading order -- no table-vs-prose distinction.
-
-Docling is the other option named in the brief. It's not wired in here
-because it pulls in a heavier layout-model stack (better for scanned/complex
-PDFs); for HTML filings, unstructured.io is a lighter free choice that
-still satisfies the "real document-structure parsing" requirement. Swapping
-in Docling later means writing one function -- `_partition_with_docling(html)
--> list[Element]` -- with the same shape as `_partition_with_unstructured`.
-"""
 import re
 from bs4 import BeautifulSoup
 
@@ -39,18 +14,7 @@ ITEM_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-
-# ============================================================
-# PRIMARY: unstructured.io element-level partitioning
-# ============================================================
-
 def partition_filing(html: str) -> list[dict]:
-    """
-    Runs the raw HTML through unstructured.io and returns a flat list of
-    {"type": "NarrativeText"|"Table"|"Title"|..., "text": "..."} dicts in
-    reading order. This is the layer that gives us real document structure
-    instead of one flattened string.
-    """
     elements = partition_html(text=html)
     out = []
     for el in elements:
@@ -60,14 +24,6 @@ def partition_filing(html: str) -> list[dict]:
 
 
 def extract_sections_structured(html: str) -> dict[str, list[dict]]:
-    """
-    Groups unstructured.io elements by Item section. Returns
-    {"item_1a": [{"type": "NarrativeText", "text": "..."}, {"type": "Table", ...}], ...}
-    so callers that care (e.g. a future table-aware financial agent) can
-    tell prose apart from tables within a section. Keeps the LAST occurrence
-    of each item header, same logic as the fallback, to skip the Table of
-    Contents.
-    """
     elements = partition_filing(html)
 
     header_positions = {}  # item_num -> index into `elements`
@@ -88,13 +44,6 @@ def extract_sections_structured(html: str) -> dict[str, list[dict]]:
 
 
 def _elements_to_text(elements: list[dict]) -> str:
-    """
-    Flattens a section's elements back to plain text for modules (diff_engine,
-    the LLM agents) that just want prose. Tables are kept but clearly tagged,
-    rather than silently merged into the surrounding paragraphs, so a table
-    that changed between filings still shows up as a visible diff instead of
-    disappearing into unrelated text.
-    """
     lines = []
     for el in elements:
         if el["type"] == "Table":
@@ -107,11 +56,6 @@ def _elements_to_text(elements: list[dict]) -> str:
 def _extract_sections_unstructured(html: str) -> dict[str, str]:
     structured = extract_sections_structured(html)
     return {name: _elements_to_text(els) for name, els in structured.items()}
-
-
-# ============================================================
-# FALLBACK: BeautifulSoup + regex (used only if unstructured fails)
-# ============================================================
 
 def html_to_clean_text(html: str) -> str:
     soup = BeautifulSoup(html, "lxml")
@@ -143,18 +87,8 @@ def _extract_sections_bs4_fallback(html: str) -> dict[str, str]:
         sections[f"item_{item_num}"] = text[start:end].strip()
     return sections
 
-
-# ============================================================
-# PUBLIC API -- unchanged signatures, so nothing downstream needs to change
-# ============================================================
-
 def extract_sections(html: str) -> dict[str, str]:
-    """
-    Returns {"item_1a": "...", "item_3": "...", "item_7": "...", ...}.
-    Tries unstructured.io first (keeps tables distinguishable via a
-    "[TABLE] " prefix); falls back to a plain-text BeautifulSoup split if
-    unstructured isn't installed or raises on a malformed document.
-    """
+
     if UNSTRUCTURED_AVAILABLE:
         try:
             sections = _extract_sections_unstructured(html)
