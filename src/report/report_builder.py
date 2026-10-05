@@ -1,6 +1,3 @@
-"""Formats the graph's final_report dict into a readable Markdown report."""
-
-
 def to_markdown(report: dict) -> str:
     new_m, old_m = report["compared_filings"]["new"], report["compared_filings"]["old"]
     s = report["section_summaries"]
