@@ -1,13 +1,3 @@
-"""
-Chroma-backed long-term memory: stores each quarter's risk-factor paragraphs
-so future runs can semantically search "have we seen a risk like this
-before, and when did it first appear?" instead of only diffing against the
-single immediately-prior filing.
-
-Uses a local sentence-transformers model for embeddings (free, runs on CPU,
-no API calls) -- this keeps the vector store fully free/offline even though
-the LLM reasoning calls go to Hugging Face.
-"""
 import chromadb
 from chromadb.utils import embedding_functions
 
@@ -37,7 +27,6 @@ def store_risk_paragraphs(ticker: str, filing_date: str, accession: str, paragra
 
 
 def find_similar_prior_risks(ticker: str, paragraph: str, n_results: int = 3) -> list[dict]:
-    """Given a new risk paragraph, find the most similar ones seen in prior filings."""
     col = _collection(ticker)
     if col.count() == 0:
         return []
