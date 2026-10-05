@@ -1,21 +1,3 @@
-"""
-Resolves free-text company input ("Aple", "microsoft", "the iPhone company",
-or a plain ticker like "AAPL") into a verified SEC ticker + CIK.
-
-Two-tier strategy, cheapest and safest first:
-
-  1. LOCAL FUZZY MATCH (rapidfuzz) against SEC's own ~13,000-company
-     ticker/title list. Free, instant, no LLM call. Handles typos, partial
-     names, and tickers typed directly.
-
-  2. LLM-ASSISTED NORMALIZATION (only if #1 is weak). Gemini is asked to
-     guess the official company name for informal input a string-matcher
-     can't handle ("Google's parent" -> "Alphabet"). Its guess is NEVER
-     trusted directly as a ticker -- LLMs can hallucinate ticker symbols --
-     it's re-run through the exact same local fuzzy match against the real
-     SEC list. If that re-check is still weak, we return candidates for the
-     user to pick from instead of silently guessing wrong.
-"""
 import json
 import re
 from rapidfuzz import process, fuzz
@@ -26,10 +8,6 @@ from src.llm.llm_gemini import chat
 LOCAL_MATCH_THRESHOLD = 85   # confident enough to skip the LLM entirely
 LLM_MATCH_THRESHOLD = 70     # confident enough to trust after LLM normalization
 
-# Corporate suffixes ("Inc.", "Corp", "Holdings", ...) drown out short typos
-# when fuzzy-matching whole titles (e.g. "Aple" vs "Apple Inc." scores much
-# lower than "Aple" vs "Apple" would). Strip them before scoring so the
-# comparison is against the actual company name, not boilerplate.
 _SUFFIX_PATTERN = re.compile(
     r"\b(inc|incorporated|corp|corporation|co|company|ltd|limited|plc|llc|lp|holdings|group|the)\b\.?",
     re.IGNORECASE,
@@ -61,18 +39,11 @@ def _best_local_matches(query: str, n: int = 5) -> list[dict]:
     index, norm_titles = _get_index()
     norm_query = _normalize(query)
 
-    # Score against normalized titles (handles typo'd/partial company names)
-    # AND raw tickers (handles someone just typing "AAPL" directly), then
-    # keep the best score per company across both.
     title_hits = process.extract(norm_query, norm_titles, scorer=fuzz.ratio, limit=n)
     tickers = [c["ticker"] for c in index]
     ticker_hits = process.extract(query.upper(), tickers, scorer=fuzz.ratio, limit=n)
 
     best_by_idx = {}
-    #for _choice, score, idx in title_hits:
-    #    best_by_idx[idx] = max(best_by_idx.get(idx, 0), score)
-    #for _choice, score, idx in ticker_hits:
-    #    best_by_idx[idx] = max(best_by_idx.get(idx, 0), score)
 
     for _choice, score, idx in title_hits:
         old_score = best_by_idx.get(idx, 0)
@@ -89,7 +60,6 @@ def _best_local_matches(query: str, n: int = 5) -> list[dict]:
 
 
 def _llm_normalize(query: str) -> dict:
-    """Asks the LLM to guess the official company name for a casual query."""
     prompt = (
         f'A user typed this into a company search box: "{query}". '
         "It might be a nickname, typo, product name, or partial name. "
@@ -109,13 +79,6 @@ def _llm_normalize(query: str) -> dict:
 
 
 def resolve_ticker(query: str) -> dict:
-    """
-    Returns either:
-      {"status": "resolved", "ticker", "cik", "title", "method", "score"}
-      {"status": "ambiguous", "candidates": [{"ticker","title","cik","score"}, ...]}
-    "method" is "local_fuzzy" or "llm_assisted", so callers can show the
-    user (and the report) how the ticker was actually determined.
-    """
     local_matches = _best_local_matches(query)
     if local_matches and local_matches[0]["score"] >= LOCAL_MATCH_THRESHOLD:
         best = local_matches[0]
