@@ -1,18 +1,3 @@
-"""
-Builds the LangGraph state machine:
-
-  resolve_ticker -> fetch_filings -> parse_sections -> diff_all_sections -> orchestrate
-        -> (conditional fan-out) -> {financial_agent, litigation_agent, sentiment_agent}
-        -> reconcile -> END
-
-resolve_ticker turns whatever the user typed (a real ticker, a typo'd
-company name, or an informal name) into a verified SEC ticker before
-anything else runs -- see ticker_resolver.py.
-
-The conditional edge after `orchestrate` is what makes this "agentic": the
-orchestrator decides at runtime which specialist agents actually run, based
-on where it found material change.
-"""
 from langgraph.graph import StateGraph, END
 
 from src.agents.state import RiskDeltaState
