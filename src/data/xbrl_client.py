@@ -1,8 +1,3 @@
-"""
-SEC XBRL API -- structured, machine-readable financial statement numbers
-(revenue, net income, assets, etc.) tagged per the us-gaap taxonomy.
-Free, no key. https://data.sec.gov/api/xbrl/companyfacts/CIK##########.json
-"""
 import time
 import requests
 import pandas as pd
@@ -21,10 +16,6 @@ def get_company_facts(cik: str) -> dict:
 
 
 def get_concept_timeseries(cik: str, tag: str, unit: str = "USD") -> pd.DataFrame:
-    """
-    Pull one us-gaap concept (e.g. "Revenues", "NetIncomeLoss",
-    "LongTermDebtNoncurrent") as a tidy DataFrame across all reported periods.
-    """
     resp = _session.get(SEC_COMPANYCONCEPT_URL.format(cik=cik, tag=tag), timeout=20)
     resp.raise_for_status()
     time.sleep(SEC_RATE_LIMIT_SLEEP_SEC)
@@ -38,10 +29,6 @@ def get_concept_timeseries(cik: str, tag: str, unit: str = "USD") -> pd.DataFram
 
 
 def quarter_over_quarter_delta(cik: str, tag: str) -> dict | None:
-    """
-    Convenience helper for the financial-statement agent: returns the most
-    recent value, the prior comparable value, and the % change for a concept.
-    """
     df = get_concept_timeseries(cik, tag)
     if df.empty or len(df) < 2:
         return None
